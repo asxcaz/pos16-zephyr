@@ -5,7 +5,13 @@ set -Eeuo pipefail
 
 log() { printf '[pos16-zephyr] %s\n' "$*"; }
 die() { printf '[pos16-zephyr] ERROR: %s\n' "$*" >&2; exit 1; }
-trap 'rc=$?; printf "[pos16-zephyr] ERROR: line %s exited with status %s\n" "$LINENO" "$rc" >&2; exit "$rc"' ERR
+handle_error() {
+  local rc=$?
+  local line="${BASH_LINENO[0]:-unknown}"
+  printf "[pos16-zephyr] ERROR: line %s exited with status %s\n" "$line" "$rc" >&2
+  exit "$rc"
+}
+trap handle_error ERR
 
 if [ "$#" -gt 0 ] && [ "$1" = "--help" ]; then
   cat <<'HELP'
