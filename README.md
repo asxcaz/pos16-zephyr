@@ -7,10 +7,10 @@ This repository contains the build launcher for Crave's **already-synced PixelOS
 Run this in the Crave terminal/CLI associated with the PixelOS project, not in an empty checkout of this script repository:
 
 ~~~bash
-crave run --no-patch -- "curl -fLSs --retry 3 https://raw.githubusercontent.com/asxcaz/pos16-zephyr/9e4bfaba326c7aa70884313d5bea54a6123ecbfa/build.sh -o /tmp/pos16-zephyr-build.sh && bash /tmp/pos16-zephyr-build.sh"
+crave run --no-patch -- "curl -fLSs --retry 3 https://raw.githubusercontent.com/asxcaz/pos16-zephyr/18eecedfc2141e881450b3c14a194d88b6fc1e00/build.sh -o /tmp/pos16-zephyr-build.sh && bash /tmp/pos16-zephyr-build.sh"
 ~~~
 
-The command deliberately does not use --clean. The script refuses to run repo init or create a fresh PixelOS checkout. It runs an incremental repo sync from inside the Crave build job so the new device projects can be added to the pre-synced source tree. It does not run repo sync inside the interactive Devspace.
+The command deliberately does not use --clean. The script refuses to run repo init or create a fresh PixelOS checkout. It runs a targeted incremental repo sync for the five zephyr/device dependency paths only, not all PixelOS manifest projects, so it can reuse Crave's pre-synced source tree. It does not run repo sync inside the interactive Devspace.
 
 ## Source branches used
 
@@ -38,7 +38,7 @@ Do not commit proprietary blobs, firmware images, signing keys, or credentials t
 
 1. Locates the existing PixelOS source root and fails if no initialized .repo tree exists.
 2. Writes a local manifest for the zephyr device tree, 5.10.260 prebuilt kernel, and required open-source dependencies.
-3. Runs incremental repo sync without --force-sync or --clean.
+3. Runs targeted incremental repo sync only for the five device/dependency paths, without --force-sync or --clean.
 4. Creates a PixelOS custom_zephyr product definition from the existing device configuration.
 5. Clones the Android 16 QPR2 MediaTek IMS project and applies the specific compatibility commits referenced by the device tree, skipping commits already present.
 6. Checks for proprietary vendor files, then runs lunch custom_zephyr-bp4a-userdebug and m pixelos.
@@ -46,4 +46,4 @@ Do not commit proprietary blobs, firmware images, signing keys, or credentials t
 
 ## Verification status
 
-The launcher has been checked for Bash syntax and the generated local-manifest XML has been parsed successfully. An actual ROM build has not been run from this repository: that requires a live Crave build job and the compatible proprietary vendor files.
+GitHub Actions (`.github/workflows/validate.yml`) checks Bash syntax, ShellCheck, the embedded manifest branches/paths, and safe refusal when no Crave source checkout exists. These are shallow checks only: the workflow does not sync Android sources or build a ROM. An actual ROM build has not been run from this repository: that requires a live Crave build job and the compatible proprietary vendor files.
