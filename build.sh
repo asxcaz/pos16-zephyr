@@ -74,7 +74,12 @@ XML
 log "Using existing Crave PixelOS source at: $ROOT"
 log "Adding zephyr device projects; no repo init or clean/full checkout will be performed."
 # Run in the Crave build job, not inside the interactive Devspace.
-repo sync -c --no-tags --optimized-fetch --prune -j4
+repo sync -c --no-tags --optimized-fetch --prune -j4 \
+  device/oplus/zephyr \
+  device/oplus/zephyr-kernel \
+  hardware/mediatek \
+  hardware/oplus \
+  device/mediatek/sepolicy_vndr
 
 [ -f "$DEVICE_DIR/lineage_zephyr.mk" ] || die "The lineage-23.2 zephyr device tree did not sync correctly."
 [ -f "$ROOT/device/oplus/zephyr-kernel/Image.gz" ] || die "The 5.10.260 prebuilt kernel Image.gz is missing. Check the upstream-test-5.10.260 kernel-prebuilt branch."
@@ -149,10 +154,7 @@ source "$ROOT/build/envsetup.sh"
 cd "$ROOT"
 lunch custom_zephyr-bp4a-userdebug
 
-JOBS="$(nproc --all 2>/dev/null || nproc)"
-if [ -n "$(printenv POS16_JOBS 2>/dev/null || true)" ]; then
-  JOBS="$(printenv POS16_JOBS)"
-fi
+JOBS="${POS16_JOBS:-$(nproc --all 2>/dev/null || nproc)}"
 log "Starting PixelOS build with $JOBS jobs."
 m -j"$JOBS" pixelos
 
