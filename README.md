@@ -4,13 +4,24 @@ This repository contains the build launcher for Crave's **already-synced PixelOS
 
 ## Launch from the existing PixelOS Crave workspace
 
-Run this in the Crave terminal/CLI. Your `crave list` shows PixelOS is project ID `82`, so use `--projectID 82` to explicitly select that pre-synced project. `--detached` returns a job URL without holding the terminal open. Do not run this from an empty checkout of this script repository:
+Your `crave list` shows PixelOS is project ID `82`. First create a snapclone workspace for that already-configured project, unless it already exists:
+
+~~~bash
+crave clone list
+# Only if /crave-devspaces/PixelOS does not already exist:
+crave clone create --projectID 82 /crave-devspaces/PixelOS
+cd /crave-devspaces/PixelOS
+~~~
+
+The `clone create` operation creates a workspace snapshot of Crave's configured PixelOS project; it is not a manual `repo init`/full source download. Do not run `repo sync` or build commands directly in the Devspace shell. The build must be submitted with `crave run` from inside this project directory. Running `crave run` from `/crave-devspaces` itself causes `Could not get project root/url` because that parent directory is not a project clone.
+
+Submit the build from `/crave-devspaces/PixelOS`:
 
 ~~~bash
 crave run --projectID 82 --no-patch --detached -- "curl -fLSs --retry 3 https://raw.githubusercontent.com/asxcaz/pos16-zephyr/ded24d69cd5dceb42c0f21a8542c5f51e0a3d462/build.sh -o /tmp/pos16-zephyr-build.sh && bash /tmp/pos16-zephyr-build.sh"
 ~~~
 
-The command deliberately does not use --clean. The script refuses to run repo init or create a fresh PixelOS checkout. It runs a targeted incremental repo sync for the five zephyr/device dependency paths only, not all PixelOS manifest projects, so it can reuse Crave's pre-synced source tree. It does not run repo sync inside the interactive Devspace.
+The command deliberately does not use `--clean`. The script refuses to run `repo init` or create a fresh PixelOS checkout. Inside the queued build job, it runs a targeted incremental `repo sync` for the five zephyr/device dependency paths only—not all PixelOS manifest projects—so it reuses Crave's pre-synced source tree.
 
 ## Source branches used
 
