@@ -1,0 +1,128 @@
+name: Validate Crave build script
+
+on:
+  push:
+    paths:
+      - "build.sh"
+      - "README.md"
+      - ".github/workflows/validate.yml"
+  pull_request:
+    paths:
+      - "build.sh"
+      - "README.md"
+      - ".github/workflows/validate.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    # Lightweight checks only; no Android source sync or ROM compilation.
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out script repository
+        uses: actions/checkout@v4
+
+      - name: Report runner storage
+        shell: bash
+        run: |
+          echo "Runner: $RUNNER_NAME"
+          echo "Workspace: $GITHUB_WORKSPACE"
+          df -h /
+          df -h "$GITHUB_WORKSPACE"
+          df -i /
+
+      - name: Validate Bash syntax
+        run: bash -n build.sh
+
+      - name: Run ShellCheck
+        shell: bash
+        run: |
+          if ! command -v shellcheck >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y shellcheck
+          fi
+          shellcheck --severity=warning build.sh
+
+      - name: Validate embedded device manifest
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          import xml.etree.ElementTree as ET
+
+          script = Path("build.sh").read_text(encoding="utf-8")
+          marker = """cat > "$MANIFEST_FILE" <<'XML'\n"""
+          if marker not in script:
+              raise SystemExit("ERROR: local manifest heredoc marker not found")
+          body = script.split(marker, 1)[1].split("\nXML\n", 1)[0]
+          root = ET.fromstring(body)
+
+          remotes = {r.attrib["name"]: r.attrib["fetch"] for r in root.findall("remote")}
+          assert remotes["zephyr"] == "https://github.com/oplus-mt6895"
+          assert remotes["zephyr-kernel"] == "https://github.com/V1NAY007"
+
+          projects = {p.attrib["path"]: p.attrib for p in root.findall("project")}
+          expected = {
+              "device/oplus/zephyr": ("android_device_oplus_zephyr", "lineage-23.2"),
+              "device/oplus/zephyr-kernel": ("android_device_oplus_zephyr-kernel", "upstream-test-5.10.260"),
+              "hardware/mediatek": ("android_hardware_mediatek", "lineage-23.2"),
+              "hardware/oplus": ("android_hardware_oplus", "lineage-23.2"),
+              "device/mediatek/sepolicy_vndr": ("android_device_mediatek_sepolicy_vndr", "lineage-23.2"),
+          }
+          for path, (name, revision) in expected.items():
+              project = projects.get(path)
+              assert project, f"Missing manifest project path: {path}"
+              assert project["name"] == name, f"Wrong project name for {path}"
+              assert project["revision"] == revision, f"Wrong branch/revision for {path}"
+
+          lines = script.splitlines()
+          start = next((i for i, line in enumerate(lines) if re.match(r"^repo sync\b", line)), None)
+          if start is None:
+              raise SystemExit("ERROR: repo sync command not found")
+          sync_lines = [lines[start]]
+          i = start
+          while sync_lines[-1].rstrip().endswith("\\") and i + 1 < len(lines):
+              i += 1
+              sync_lines.append(lines[i])
+          sync = "\n".join(sync_lines)
+
+          for path in expected:
+              assert path in sync, f"repo sync is not targeted to {path}"
+          assert "--force-sync" not in sync and "--clean" not in sync, "Destructive sync flags must not be used"
+          assert not re.search(r"(?m)^\s*repo init\b", script), "Script must not initialize a fresh source checkout"
+          assert "repo sync -c --no-tags --optimized-fetch --prune -j4" in sync
+          print("Embedded manifest XML: valid")
+          print(f"Validated {len(expected)} pinned device projects")
+          print("repo sync is targeted; no repo init or destructive sync flags")
+          PY
+
+      - name: Smoke-test safe refusal without a Crave source checkout
+        shell: bash
+        run: |
+          set -euo pipefail
+          tmp="$(mktemp -d)"
+          trap 'rm -rf "$tmp"' EXIT
+          mkdir -p "$tmp/source/build"
+          touch "$tmp/source/build/envsetup.sh"
+
+          set +e
+          (cd "$tmp/source" && bash "$GITHUB_WORKSPACE/build.sh") >"$tmp/smoke.log" 2>&1
+          status=$?
+          set -e
+
+          if [[ "$status" -eq 0 ]]; then
+            cat "$tmp/smoke.log"
+            echo "ERROR: script should refuse a source tree without .repo" >&2
+            exit 1
+          fi
+          grep -Fq "No .repo directory found. Refusing to initialize or clone a fresh PixelOS source tree." "$tmp/smoke.log"
+          if grep -Eq "^(repo init|repo sync)" "$tmp/smoke.log"; then
+            cat "$tmp/smoke.log"
+            echo "ERROR: script attempted repo operations during the smoke test" >&2
+            exit 1
+          fi
+          echo "Safe refusal behavior: passed"
