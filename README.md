@@ -7,7 +7,7 @@ This repository contains the build launcher for Crave's **already-synced PixelOS
 Run this in the Crave terminal/CLI associated with the PixelOS project, not in an empty checkout of this script repository:
 
 ~~~bash
-crave run --no-patch -- "curl -fLSs --retry 3 https://raw.githubusercontent.com/asxcaz/pos16-zephyr/18eecedfc2141e881450b3c14a194d88b6fc1e00/build.sh -o /tmp/pos16-zephyr-build.sh && bash /tmp/pos16-zephyr-build.sh"
+crave run --no-patch -- "curl -fLSs --retry 3 https://raw.githubusercontent.com/asxcaz/pos16-zephyr/ded24d69cd5dceb42c0f21a8542c5f51e0a3d462/build.sh -o /tmp/pos16-zephyr-build.sh && bash /tmp/pos16-zephyr-build.sh"
 ~~~
 
 The command deliberately does not use --clean. The script refuses to run repo init or create a fresh PixelOS checkout. It runs a targeted incremental repo sync for the five zephyr/device dependency paths only, not all PixelOS manifest projects, so it can reuse Crave's pre-synced source tree. It does not run repo sync inside the interactive Devspace.
