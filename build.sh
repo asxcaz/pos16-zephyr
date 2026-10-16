@@ -91,6 +91,18 @@ repo sync -c --no-tags --optimized-fetch --prune -j4 \
 [ -f "$ROOT/device/oplus/zephyr-kernel/Image.gz" ] || die "The 5.10.260 prebuilt kernel Image.gz is missing. Check the upstream-test-5.10.260 kernel-prebuilt branch."
 [ -f "$ROOT/device/oplus/zephyr-kernel/dtb/mt6895.dtb" ] || die "The prebuilt MT6895 DTB is missing."
 
+# Proprietary vendor files are not in the public device-tree repository.
+if [ ! -f "$ROOT/vendor/oplus/zephyr/zephyr-vendor.mk" ] || [ ! -f "$ROOT/vendor/oplus/zephyr/BoardConfigVendor.mk" ]; then
+  cat >&2 <<'MISSING_VENDOR'
+[pos16-zephyr] ERROR: required proprietary vendor files are missing:
+  vendor/oplus/zephyr/zephyr-vendor.mk
+  vendor/oplus/zephyr/BoardConfigVendor.mk
+
+These files must be extracted from compatible OnePlus 10R (pickle) stock firmware/device or supplied from a trusted vendor backup. They are not present in the public PixelOS/device source. Do not put proprietary blobs in this public script repository. Add the vendor tree to the Crave build workspace, then rerun the same command.
+MISSING_VENDOR
+  exit 2
+fi
+
 # Make the LineageOS device product discoverable by PixelOS vendor/custom config.
 cp "$DEVICE_DIR/lineage_zephyr.mk" "$DEVICE_DIR/custom_zephyr.mk"
 sed -i 's@vendor/lineage/config/common_full_phone.mk@vendor/custom/config/common_full_phone.mk@' "$DEVICE_DIR/custom_zephyr.mk"
@@ -116,44 +128,51 @@ if ! git -C "$IMS_DIR" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
     https://github.com/Adarsh0127-Elite/android_vendor_mediatek_ims.git "$IMS_DIR"
 fi
 
-apply_commit_if_missing() {
+apply_patch_if_applicable() {
   local repo_dir="$1"
-  local remote_url="$2"
-  local commit_sha="$3"
+  local patch_url="$2"
+  local label="$3"
+  local patch_file
   git -C "$repo_dir" rev-parse --is-inside-work-tree >/dev/null 2>&1 || die "Expected git project not found: $repo_dir"
-  if git -C "$repo_dir" merge-base --is-ancestor "$commit_sha" HEAD >/dev/null 2>&1; then
-    log "Patch already present in $repo_dir: $commit_sha"
+  patch_file="$(mktemp)"
+  if ! curl -fLsS --retry 3 "$patch_url" -o "$patch_file"; then
+    rm -f "$patch_file"
+    log "WARNING: Could not download optional compatibility patch: $label"
     return 0
   fi
-  log "Fetching required device compatibility patch $commit_sha"
-  git -C "$repo_dir" fetch "$remote_url" "$commit_sha"
-  git -C "$repo_dir" cherry-pick "$commit_sha"
+
+  # Use a small patch file instead of fetching an entire framework repository's
+  # commit ancestry (which can download hundreds of thousands of Git objects).
+  if git -C "$repo_dir" apply --reverse --check "$patch_file" >/dev/null 2>&1; then
+    log "Patch already applied: $label"
+    rm -f "$patch_file"
+    return 0
+  fi
+  if git -C "$repo_dir" apply --check "$patch_file" >/dev/null 2>&1; then
+    git -C "$repo_dir" apply "$patch_file"
+    log "Applied patch: $label"
+  else
+    log "WARNING: Patch does not apply cleanly to this PixelOS revision; skipped optional enhancement: $label"
+  fi
+  rm -f "$patch_file"
 }
 
-apply_commit_if_missing "$ROOT/packages/apps/Aperture" \
-  https://github.com/Adarsh0127-Elite/android_packages_apps_Aperture.git \
-  9509277efc852ad8bdcce204e0d9cfe104b6d190
-apply_commit_if_missing "$ROOT/frameworks/native" \
-  https://github.com/oplus-mt6895/android_frameworks_native.git \
-  5ae7b13cc9e7359261d15ab185ee4aaeb512f754
-apply_commit_if_missing "$ROOT/frameworks/native" \
-  https://github.com/oplus-mt6895/android_frameworks_native.git \
-  31f62caf1160bb8460eb7f7c66e279fdb51867d6
-apply_commit_if_missing "$ROOT/frameworks/base" \
-  https://github.com/oplus-mt6895/android_frameworks_base.git \
-  8fdf7742a1adabcb5c79fd23dcf2039fcda6ce3b
+apply_patch_if_applicable "$ROOT/packages/apps/Aperture" \
+  https://github.com/Adarsh0127-Elite/android_packages_apps_Aperture/commit/9509277efc852ad8bdcce204e0d9cfe104b6d190.patch \
+  "Aperture MediaTek 60 FPS support"
 
-# Proprietary vendor files are not in the public device-tree repository.
-if [ ! -f "$ROOT/vendor/oplus/zephyr/zephyr-vendor.mk" ] || [ ! -f "$ROOT/vendor/oplus/zephyr/BoardConfigVendor.mk" ]; then
-  cat >&2 <<'MISSING_VENDOR'
-[pos16-zephyr] ERROR: required proprietary vendor files are missing:
-  vendor/oplus/zephyr/zephyr-vendor.mk
-  vendor/oplus/zephyr/BoardConfigVendor.mk
+# PixelOS sixteen-qpr2 has refactored Surface dequeue/queue handling. The
+# upstream GED-KPI patch conflicts in Surface.cpp and Surface.h and must be
+# ported to the new API before it can be enabled safely. Skip it for this build.
+log "Skipping optional GED-KPI Surface patch 5ae7b13cc9e7359261d15ab185ee4aaeb512f754: known API conflict with PixelOS sixteen-qpr2."
 
-These files must be extracted from compatible OnePlus 10R (pickle) stock firmware/device or supplied from a trusted vendor backup. They are not present in the public PixelOS/device source. Do not put proprietary blobs in this public script repository. Add the vendor tree to the Crave build workspace, then rerun the same command.
-MISSING_VENDOR
-  exit 2
-fi
+apply_patch_if_applicable "$ROOT/frameworks/native" \
+  https://github.com/oplus-mt6895/android_frameworks_native/commit/31f62caf1160bb8460eb7f7c66e279fdb51867d6.patch \
+  "MediaTek UDFPS dither support"
+
+apply_patch_if_applicable "$ROOT/frameworks/base" \
+  https://github.com/oplus-mt6895/android_frameworks_base/commit/8fdf7742a1adabcb5c79fd23dcf2039fcda6ce3b.patch \
+  "MediaTek UDFPS GHBM support"
 
 log "Loading PixelOS build environment."
 source "$ROOT/build/envsetup.sh"
