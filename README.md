@@ -18,15 +18,15 @@ The `clone create` operation creates a workspace snapshot of Crave's configured 
 From `/crave-devspaces/PixelOS`, first run a **vendor preflight** that does not start compiling:
 
 ~~~bash
-crave run --projectID 82 --no-patch --detached -- "curl -fLSs --retry 3 https://raw.githubusercontent.com/asxcaz/pos16-zephyr/2eaece0f93e02664a1bcd3819c3196cce8cadf62/build.sh -o /tmp/pos16-zephyr-build.sh && POS16_CHECK_ONLY=1 bash /tmp/pos16-zephyr-build.sh"
+crave run --projectID 82 --no-patch --detached -- "curl -fLSs --retry 3 https://raw.githubusercontent.com/asxcaz/pos16-zephyr/acd28a99ec6c298cbdf93f3d9aad9be9c51efe98/build.sh -o /tmp/pos16-zephyr-build.sh && POS16_CHECK_ONLY=1 bash /tmp/pos16-zephyr-build.sh"
 ~~~
 
-This syncs only the five device/dependency paths, verifies the device tree and prebuilt kernel files, then clones the documented Vendor tree from GitLab into `vendor/oplus/zephyr` if that directory does not already exist. By default it uses the GitLab project's default branch; set `POS16_VENDOR_BRANCH` to pin a specific branch. If the directory already exists but lacks either required makefile, the script stops rather than overwriting it. With `POS16_CHECK_ONLY=1`, it reports the Vendor file count and exits **before** changing product files, cloning IMS, applying patches, or compiling. The check verifies the two required makefiles, not every referenced proprietary blob.
+This syncs only the five device/dependency paths, verifies the device tree and prebuilt kernel files, then clones the documented Vendor tree from GitLab into `vendor/oplus/zephyr` if that directory does not already exist. It clones the verified `lineage-23.2` branch by default; set `POS16_VENDOR_BRANCH` to override that branch. If the directory already exists but lacks either required makefile, the script stops rather than overwriting it. With `POS16_CHECK_ONLY=1`, it reports the Vendor file count and exits **before** changing product files, cloning IMS, applying patches, or compiling. The check verifies the two required makefiles, not every referenced proprietary blob.
 
 If that check passes, submit the actual build:
 
 ~~~bash
-crave run --projectID 82 --no-patch --detached -- "curl -fLSs --retry 3 https://raw.githubusercontent.com/asxcaz/pos16-zephyr/2eaece0f93e02664a1bcd3819c3196cce8cadf62/build.sh -o /tmp/pos16-zephyr-build.sh && bash /tmp/pos16-zephyr-build.sh"
+crave run --projectID 82 --no-patch --detached -- "curl -fLSs --retry 3 https://raw.githubusercontent.com/asxcaz/pos16-zephyr/acd28a99ec6c298cbdf93f3d9aad9be9c51efe98/build.sh -o /tmp/pos16-zephyr-build.sh && bash /tmp/pos16-zephyr-build.sh"
 ~~~
 
 Both commands deliberately avoid `--clean`, `repo init`, and full PixelOS source initialization.
@@ -39,7 +39,7 @@ Both commands deliberately avoid `--clean`, `repo init`, and full PixelOS source
 - MediaTek hardware: oplus-mt6895/android_hardware_mediatek, lineage-23.2
 - OPlus hardware: oplus-mt6895/android_hardware_oplus, lineage-23.2
 - MediaTek vendor sepolicy: oplus-mt6895/android_device_mediatek_sepolicy_vndr, lineage-23.2
-- Vendor tree: [NINJAHUNTER1357/proprietary_vendor_oplus_zephyr](https://gitlab.com/NINJAHUNTER1357/proprietary_vendor_oplus_zephyr), GitLab default branch unless `POS16_VENDOR_BRANCH` is set
+- Vendor tree: [NINJAHUNTER1357/proprietary_vendor_oplus_zephyr](https://gitlab.com/NINJAHUNTER1357/proprietary_vendor_oplus_zephyr), `lineage-23.2` by default; override with `POS16_VENDOR_BRANCH`
 
 The device tree BoardConfig uses device/oplus/zephyr-kernel as a prebuilt kernel and sets TARGET_FORCE_PREBUILT_KERNEL. Therefore this script uses the supplied 5.10.260 Image.gz and MT6895 DTB; it does not build android_kernel_oplus_mt6895 from source. If changing to a source-built kernel later, use that kernel repository's lineage-24.0 branch, not the deprecated 23.2 branch.
 
@@ -50,7 +50,7 @@ The device tree requires these files:
 - `vendor/oplus/zephyr/zephyr-vendor.mk`
 - `vendor/oplus/zephyr/BoardConfigVendor.mk`
 
-The organization README lists the Vendor tree at [NINJAHUNTER1357/proprietary_vendor_oplus_zephyr](https://gitlab.com/NINJAHUNTER1357/proprietary_vendor_oplus_zephyr). The build script now clones that repository into `vendor/oplus/zephyr` automatically when the directory is absent. It uses the GitLab project's default branch unless `POS16_VENDOR_BRANCH` is set explicitly.
+The organization README lists the Vendor tree at [NINJAHUNTER1357/proprietary_vendor_oplus_zephyr](https://gitlab.com/NINJAHUNTER1357/proprietary_vendor_oplus_zephyr). The build script now clones that repository into `vendor/oplus/zephyr` automatically when the directory is absent. It uses the verified `lineage-23.2` branch unless `POS16_VENDOR_BRANCH` is set explicitly.
 
 If `vendor/oplus/zephyr` already exists and contains both required makefiles, the script reuses it. If the directory exists but either file is missing, the script stops and refuses to overwrite it; repair or move that directory before retrying.
 
