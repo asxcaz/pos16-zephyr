@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # PixelOS Android 16 QPR2 build helper for realme GT Neo 3 / zephyr.
 # Run via crave run against Crave's pre-synced PixelOS project.
-set -Eeuo pipefail
+set -Ee -o pipefail
 
 log() { printf '[pos16-zephyr] %s\n' "$*"; }
 die() { printf '[pos16-zephyr] ERROR: %s\n' "$*" >&2; exit 1; }
