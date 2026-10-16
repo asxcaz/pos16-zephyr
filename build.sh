@@ -18,8 +18,9 @@ if [ "$#" -gt 0 ] && [ "$1" = "--help" ]; then
 Build PixelOS Android 16 QPR2 for realme GT Neo 3 (zephyr) in a pre-synced Crave PixelOS workspace.
 This script does not run repo init, does not use --clean/--force-sync, and does not clone full PixelOS source.
 It performs an incremental repo sync to add/update device-specific repositories.
-Required proprietary files must already exist in vendor/oplus/zephyr.
-Set POS16_CHECK_ONLY=1 to sync device dependencies and check prerequisites without starting a ROM build.
+The script fetches the public device-specific vendor tree from the project's documented GitLab repository when it is not already present.
+Set POS16_VENDOR_BRANCH to pin a vendor branch; otherwise the GitLab project's default branch is used.
+Set POS16_CHECK_ONLY=1 to sync device dependencies, prepare Vendor, and check prerequisites without starting a ROM build.
 HELP
   exit 0
 fi
@@ -92,17 +93,49 @@ repo sync -c --no-tags --optimized-fetch --prune -j4 \
 [ -f "$ROOT/device/oplus/zephyr-kernel/Image.gz" ] || die "The 5.10.260 prebuilt kernel Image.gz is missing. Check the upstream-test-5.10.260 kernel-prebuilt branch."
 [ -f "$ROOT/device/oplus/zephyr-kernel/dtb/mt6895.dtb" ] || die "The prebuilt MT6895 DTB is missing."
 
-# Proprietary vendor files are not in the public device-tree repository.
-if [ ! -f "$ROOT/vendor/oplus/zephyr/zephyr-vendor.mk" ] || [ ! -f "$ROOT/vendor/oplus/zephyr/BoardConfigVendor.mk" ]; then
-  cat >&2 <<'MISSING_VENDOR'
-[pos16-zephyr] ERROR: required proprietary vendor files are missing:
-  vendor/oplus/zephyr/zephyr-vendor.mk
-  vendor/oplus/zephyr/BoardConfigVendor.mk
+# The organization README lists this GitLab project as the required Vendor tree.
+# Clone to the path inherited by device.mk and BoardConfig.mk; do not put blobs
+# in this public build-helper repository.
+VENDOR_DIR="$ROOT/vendor/oplus/zephyr"
+VENDOR_REPO_URL="https://gitlab.com/NINJAHUNTER1357/proprietary_vendor_oplus_zephyr.git"
+VENDOR_MK="$VENDOR_DIR/zephyr-vendor.mk"
+VENDOR_BOARD_MK="$VENDOR_DIR/BoardConfigVendor.mk"
 
-These files must be extracted from compatible OnePlus 10R (pickle) stock firmware/device or supplied from a trusted vendor backup. They are not present in the public PixelOS/device source. Do not put proprietary blobs in this public script repository. Add the vendor tree to the Crave build workspace, then rerun the same command.
-MISSING_VENDOR
-  exit 2
+if [ -f "$VENDOR_MK" ] && [ -f "$VENDOR_BOARD_MK" ]; then
+  log "Using existing Vendor tree at vendor/oplus/zephyr."
+elif [ -e "$VENDOR_DIR" ]; then
+  die "vendor/oplus/zephyr already exists but is missing zephyr-vendor.mk and/or BoardConfigVendor.mk; refusing to overwrite an existing directory. Repair or move it, then rerun."
+else
+  mkdir -p "$ROOT/vendor/oplus"
+  VENDOR_TMP_ROOT="$(mktemp -d "$ROOT/vendor/oplus/.zephyr-vendor.XXXXXX")"
+  VENDOR_TMP="$VENDOR_TMP_ROOT/repo"
+
+  if [ -n "${POS16_VENDOR_BRANCH:-}" ]; then
+    log "Cloning Vendor tree from GitLab branch: $POS16_VENDOR_BRANCH"
+    if ! git clone --depth=1 --single-branch --branch "$POS16_VENDOR_BRANCH" "$VENDOR_REPO_URL" "$VENDOR_TMP"; then
+      rm -rf "$VENDOR_TMP_ROOT"
+      die "Could not clone Vendor tree branch '$POS16_VENDOR_BRANCH' from $VENDOR_REPO_URL"
+    fi
+  else
+    log "Cloning Vendor tree from GitLab default branch."
+    if ! git clone --depth=1 "$VENDOR_REPO_URL" "$VENDOR_TMP"; then
+      rm -rf "$VENDOR_TMP_ROOT"
+      die "Could not clone Vendor tree from $VENDOR_REPO_URL"
+    fi
+  fi
+
+  if [ ! -f "$VENDOR_TMP/zephyr-vendor.mk" ] || [ ! -f "$VENDOR_TMP/BoardConfigVendor.mk" ]; then
+    rm -rf "$VENDOR_TMP_ROOT"
+    die "The cloned Vendor tree does not contain the required zephyr-vendor.mk and BoardConfigVendor.mk files at its root. Check the GitLab default branch or set POS16_VENDOR_BRANCH."
+  fi
+
+  mv "$VENDOR_TMP" "$VENDOR_DIR"
+  rmdir "$VENDOR_TMP_ROOT"
+  log "Vendor tree installed at vendor/oplus/zephyr (branch: $(git -C "$VENDOR_DIR" branch --show-current))."
 fi
+
+[ -f "$VENDOR_MK" ] || die "Required vendor makefile is missing: vendor/oplus/zephyr/zephyr-vendor.mk"
+[ -f "$VENDOR_BOARD_MK" ] || die "Required vendor board config is missing: vendor/oplus/zephyr/BoardConfigVendor.mk"
 
 if [ "${POS16_CHECK_ONLY:-0}" = "1" ]; then
   vendor_file_count="$(find "$ROOT/vendor/oplus/zephyr" -type f -print | wc -l | tr -d '[:space:]')"
