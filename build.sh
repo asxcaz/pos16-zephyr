@@ -19,7 +19,7 @@ Build PixelOS Android 16 QPR2 for realme GT Neo 3 (zephyr) in a pre-synced Crave
 This script does not run repo init, does not use --clean/--force-sync, and does not clone full PixelOS source.
 It performs an incremental repo sync to add/update device-specific repositories.
 The script fetches the public device-specific vendor tree from the project's documented GitLab repository when it is not already present.
-Set POS16_VENDOR_BRANCH to pin a vendor branch; otherwise the GitLab project's default branch is used.
+The vendor branch defaults to lineage-23.2; set POS16_VENDOR_BRANCH to override it.
 Set POS16_CHECK_ONLY=1 to sync device dependencies, prepare Vendor, and check prerequisites without starting a ROM build.
 HELP
   exit 0
@@ -110,18 +110,11 @@ else
   VENDOR_TMP_ROOT="$(mktemp -d "$ROOT/vendor/oplus/.zephyr-vendor.XXXXXX")"
   VENDOR_TMP="$VENDOR_TMP_ROOT/repo"
 
-  if [ -n "${POS16_VENDOR_BRANCH:-}" ]; then
-    log "Cloning Vendor tree from GitLab branch: $POS16_VENDOR_BRANCH"
-    if ! git clone --depth=1 --single-branch --branch "$POS16_VENDOR_BRANCH" "$VENDOR_REPO_URL" "$VENDOR_TMP"; then
-      rm -rf "$VENDOR_TMP_ROOT"
-      die "Could not clone Vendor tree branch '$POS16_VENDOR_BRANCH' from $VENDOR_REPO_URL"
-    fi
-  else
-    log "Cloning Vendor tree from GitLab default branch."
-    if ! git clone --depth=1 "$VENDOR_REPO_URL" "$VENDOR_TMP"; then
-      rm -rf "$VENDOR_TMP_ROOT"
-      die "Could not clone Vendor tree from $VENDOR_REPO_URL"
-    fi
+  VENDOR_BRANCH="${POS16_VENDOR_BRANCH:-lineage-23.2}"
+  log "Cloning Vendor tree from GitLab branch: $VENDOR_BRANCH"
+  if ! git clone --depth=1 --single-branch --branch "$VENDOR_BRANCH" "$VENDOR_REPO_URL" "$VENDOR_TMP"; then
+    rm -rf "$VENDOR_TMP_ROOT"
+    die "Could not clone Vendor tree branch '$VENDOR_BRANCH' from $VENDOR_REPO_URL"
   fi
 
   if [ ! -f "$VENDOR_TMP/zephyr-vendor.mk" ] || [ ! -f "$VENDOR_TMP/BoardConfigVendor.mk" ]; then
