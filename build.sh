@@ -19,6 +19,7 @@ Build PixelOS Android 16 QPR2 for realme GT Neo 3 (zephyr) in a pre-synced Crave
 This script does not run repo init, does not use --clean/--force-sync, and does not clone full PixelOS source.
 It performs an incremental repo sync to add/update device-specific repositories.
 Required proprietary files must already exist in vendor/oplus/zephyr.
+Set POS16_CHECK_ONLY=1 to sync device dependencies and check prerequisites without starting a ROM build.
 HELP
   exit 0
 fi
@@ -101,6 +102,13 @@ if [ ! -f "$ROOT/vendor/oplus/zephyr/zephyr-vendor.mk" ] || [ ! -f "$ROOT/vendor
 These files must be extracted from compatible OnePlus 10R (pickle) stock firmware/device or supplied from a trusted vendor backup. They are not present in the public PixelOS/device source. Do not put proprietary blobs in this public script repository. Add the vendor tree to the Crave build workspace, then rerun the same command.
 MISSING_VENDOR
   exit 2
+fi
+
+if [ "${POS16_CHECK_ONLY:-0}" = "1" ]; then
+  vendor_file_count="$(find "$ROOT/vendor/oplus/zephyr" -type f -print | wc -l | tr -d '[:space:]')"
+  log "Vendor preflight passed: required makefiles found; vendor/oplus/zephyr contains ${vendor_file_count} files."
+  log "POS16_CHECK_ONLY=1: stopping before product-file changes, IMS cloning, patches, or Android compilation."
+  exit 0
 fi
 
 # Make the LineageOS device product discoverable by PixelOS vendor/custom config.
