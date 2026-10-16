@@ -65,6 +65,17 @@ jobs:
           assert remotes["zephyr"] == "https://github.com/oplus-mt6895"
           assert remotes["zephyr-kernel"] == "https://github.com/V1NAY007"
 
+          vendor_url = "https://gitlab.com/NINJAHUNTER1357/proprietary_vendor_oplus_zephyr.git"
+          assert f'VENDOR_REPO_URL="{vendor_url}"' in script, "Missing official GitLab Vendor repository URL"
+          assert 'git clone --depth=1 "$VENDOR_REPO_URL" "$VENDOR_TMP"' in script, "Missing default-branch Vendor clone"
+          assert 'git clone --depth=1 --single-branch --branch "$POS16_VENDOR_BRANCH" "$VENDOR_REPO_URL" "$VENDOR_TMP"' in script, "Missing explicit Vendor branch override"
+          assert 'vendor/oplus/zephyr/zephyr-vendor.mk' in script
+          assert 'vendor/oplus/zephyr/BoardConfigVendor.mk' in script
+
+          readme = Path("README.md").read_text(encoding="utf-8")
+          assert "https://gitlab.com/NINJAHUNTER1357/proprietary_vendor_oplus_zephyr" in readme
+          assert "POS16_VENDOR_BRANCH" in readme
+
           projects = {p.attrib["path"]: p.attrib for p in root.findall("project")}
           expected = {
               "device/oplus/zephyr": ("android_device_oplus_zephyr", "lineage-23.2"),
