@@ -88,7 +88,7 @@ jobs:
 
           remotes = {r.attrib["name"]: r.attrib["fetch"] for r in root.findall("remote")}
           assert remotes["zephyr"] == "https://github.com/oplus-mt6895"
-          assert remotes["zephyr-kernel"] == "https://github.com/V1NAY007"
+          assert remotes["zephyr-kernel"] == "https://gitlab.com/NINJAHUNTER1357"
           assert 'MANIFEST_URL="https://github.com/PixelOS-AOSP/android_manifest.git"' in script
           assert 'MANIFEST_BRANCH="sixteen-qpr2"' in script
           assert 'repo init -u "$MANIFEST_URL" -b "$MANIFEST_BRANCH"' in script, "Must pin the existing repo client to the PixelOS QPR2 manifest"
@@ -108,7 +108,7 @@ jobs:
           projects = {p.attrib["path"]: p.attrib for p in root.findall("project")}
           expected = {
               "device/oplus/zephyr": ("android_device_oplus_zephyr", "lineage-23.2"),
-              "device/oplus/zephyr-kernel": ("android_device_oplus_zephyr-kernel", "upstream-test-5.10.260"),
+              "device/oplus/zephyr-kernel": ("android_device_oplus_zephyr-kernel", "los-23.2"),
               "hardware/mediatek": ("android_hardware_mediatek", "lineage-23.2"),
               "hardware/oplus": ("android_hardware_oplus", "lineage-23.2"),
               "device/mediatek/sepolicy_vndr": ("android_device_mediatek_sepolicy_vndr", "lineage-23.2"),
@@ -301,14 +301,27 @@ jobs:
           PY
 
           echo "::group::compare current GitHub kernel candidate with organization's GitLab kernel repo"
-          for artifact in Image.gz dtb/mt6895.dtb modules/vendor_dlkm.modules.load modules/vendor_ramdisk.modules.load modules/vendor_ramdisk.modules.load.recovery; do
+          for artifact in \
+            Image.gz \
+            dtb/mt6895.dtb \
+            modules/vendor_dlkm.modules.load \
+            modules/vendor_ramdisk.modules.load \
+            modules/vendor_ramdisk.modules.load.recovery \
+            modules/bt_drv_6895.ko modules/connfem.ko modules/conninfra.ko \
+            modules/fmradio_drv_connac2x.ko modules/gps_drv_dl_v050.ko \
+            modules/gps_pwr.ko modules/gps_scp.ko modules/wlan_drv_gen4m_6895.ko \
+            modules/wmt_chrdev_wifi_connac2.ko; do
             if cmp -s "$WORK/kernel-github/$artifact" "$WORK/kernel-gitlab/$artifact"; then
               echo "IDENTICAL: $artifact"
             else
               echo "DIFFERENT: $artifact"
             fi
           done
-          echo "GitHub kernel commit: $(git -C "$WORK/kernel-github" rev-parse --short HEAD)"
+          for variant in kernel-github kernel-gitlab; do
+            version="$(strings "$WORK/$variant/Image.gz" | grep -m1 -E 'Linux version 5\.10' || true)"
+            echo "$variant Image.gz version string: ${version:-not-found}"
+          done
+          echo "GitHub candidate kernel commit: $(git -C "$WORK/kernel-github" rev-parse --short HEAD)"
           echo "GitLab official kernel commit: $(git -C "$WORK/kernel-gitlab" rev-parse --short HEAD)"
           echo "::endgroup::"
 
@@ -323,7 +336,8 @@ jobs:
           mkdir -p "$tmp"
 
           classify_patch() {
-            local label="$1" repo="$2" url="$3" patch="$tmp/$label.patch"
+            local label="$1" repo="$2" url="$3"
+            local patch="$tmp/$label.patch"
             curl -fLsS --retry 3 "$url" -o "$patch"
             if git -C "$repo" apply --reverse --check "$patch" >/dev/null 2>&1; then
               echo "PATCH STATUS: $label = already-present"

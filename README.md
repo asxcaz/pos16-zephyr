@@ -21,7 +21,7 @@ Do not run `repo sync` or Android build commands directly in the interactive Dev
 
 - PixelOS manifest/base projects: `PixelOS-AOSP/android_manifest`, `sixteen-qpr2`
 - Device tree: `oplus-mt6895/android_device_oplus_zephyr`, `lineage-23.2`
-- Prebuilt kernel candidate: `V1NAY007/android_device_oplus_zephyr-kernel`, `upstream-test-5.10.260`
+- Official prebuilt kernel tree: [NINJAHUNTER1357/android_device_oplus_zephyr-kernel](https://gitlab.com/NINJAHUNTER1357/android_device_oplus_zephyr-kernel), `los-23.2`
 - MediaTek hardware: `oplus-mt6895/android_hardware_mediatek`, `lineage-23.2`
 - OPlus hardware: `oplus-mt6895/android_hardware_oplus`, `lineage-23.2`
 - MediaTek vendor sepolicy: `oplus-mt6895/android_device_mediatek_sepolicy_vndr`, `lineage-23.2`
@@ -37,7 +37,7 @@ The required vendor makefiles are:
 - `vendor/oplus/zephyr/zephyr-vendor.mk`
 - `vendor/oplus/zephyr/BoardConfigVendor.mk`
 
-When `vendor/oplus/zephyr` is absent, the script shallow-clones the documented GitLab Vendor tree at `lineage-23.2`. It refuses to overwrite an existing partial vendor directory. It also pins IMS to `android-16-qpr2` and checks that `vendor/mediatek/ims/ims.mk` exists.
+When `vendor/oplus/zephyr` is absent, the script shallow-clones the documented GitLab Vendor tree at `lineage-23.2`. It refuses to overwrite an existing partial vendor directory; `POS16_VENDOR_BRANCH` can override the default for testing another compatible branch. It also pins IMS to `android-16-qpr2` and checks that `vendor/mediatek/ims/ims.mk` exists.
 
 Do not commit proprietary blobs, firmware images, signing keys, or credentials to this public build-helper repository.
 

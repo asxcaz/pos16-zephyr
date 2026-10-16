@@ -56,7 +56,7 @@ cat > "$MANIFEST_FILE" <<'XML'
 <?xml version="1.0" encoding="UTF-8"?>
 <manifest>
     <remote name="zephyr" fetch="https://github.com/oplus-mt6895" />
-    <remote name="zephyr-kernel" fetch="https://github.com/V1NAY007" />
+    <remote name="zephyr-kernel" fetch="https://gitlab.com/NINJAHUNTER1357" />
 
     <project name="android_device_oplus_zephyr"
              path="device/oplus/zephyr"
@@ -65,7 +65,7 @@ cat > "$MANIFEST_FILE" <<'XML'
     <project name="android_device_oplus_zephyr-kernel"
              path="device/oplus/zephyr-kernel"
              remote="zephyr-kernel"
-             revision="upstream-test-5.10.260" />
+             revision="los-23.2" />
     <project name="android_hardware_mediatek"
              path="hardware/mediatek"
              remote="zephyr"
