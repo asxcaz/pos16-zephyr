@@ -1,72 +1,63 @@
 # PixelOS 16 QPR2 for realme GT Neo 3 (zephyr)
 
-This repository contains the build launcher for Crave's **already-synced PixelOS project**. It is not a ROM source mirror.
+This repository contains the build launcher for Crave's **existing PixelOS project**. It is not a ROM source mirror, and it does not contain proprietary vendor blobs.
 
-## Launch from the existing PixelOS Crave workspace
+## Launch the formal build
 
-Your `crave list` shows PixelOS is project ID `82`. First create a snapclone workspace for that already-configured project, unless it already exists:
+Use the already configured PixelOS Crave project (project ID `82`). From the existing Devspace:
 
 ~~~bash
-crave clone list
-# Only if /crave-devspaces/PixelOS does not already exist:
-crave clone create --projectID 82 /crave-devspaces/PixelOS
 cd /crave-devspaces/PixelOS
+crave run --projectID 82 --no-patch --detached -- "curl -fLSs --retry 3 https://raw.githubusercontent.com/asxcaz/pos16-zephyr/main/build.sh -o /tmp/pos16-zephyr-build.sh && bash /tmp/pos16-zephyr-build.sh"
 ~~~
 
-The `clone create` operation creates a workspace snapshot of Crave's configured PixelOS project; it is not a manual `repo init`/full source download. Do not run `repo sync` or build commands directly in the Devspace shell. The build must be submitted with `crave run` from inside this project directory. Running `crave run` from `/crave-devspaces` itself causes `Could not get project root/url` because that parent directory is not a project clone.
+The script first verifies that the workspace already has an initialized `.repo` checkout. It then re-pins the **existing** repo client to the official PixelOS `sixteen-qpr2` manifest and performs an incremental sync of the projects described by that manifest plus the local zephyr manifest.
 
-From `/crave-devspaces/PixelOS`, first run a **vendor preflight** that does not start compiling:
+**This updates the existing checkout; it does not run `--clean`, `--force-sync`, or clone a new PixelOS source tree.** Existing Git objects and checkouts are reused, while projects that are behind their manifest revisions will be fetched/updated. Because the base source provided by Crave may be older, the full manifest sync is intentional; syncing only the device repos would leave the Android/PixelOS base stale.
 
-~~~bash
-crave run --projectID 82 --no-patch --detached -- "curl -fLSs --retry 3 https://raw.githubusercontent.com/asxcaz/pos16-zephyr/acd28a99ec6c298cbdf93f3d9aad9be9c51efe98/build.sh -o /tmp/pos16-zephyr-build.sh && POS16_CHECK_ONLY=1 bash /tmp/pos16-zephyr-build.sh"
-~~~
+Do not run `repo sync` or Android build commands directly in the interactive Devspace shell. Submit the build with `crave run` from inside the project.
 
-This syncs only the five device/dependency paths, verifies the device tree and prebuilt kernel files, then clones the documented Vendor tree from GitLab into `vendor/oplus/zephyr` if that directory does not already exist. It clones the verified `lineage-23.2` branch by default; set `POS16_VENDOR_BRANCH` to override that branch. If the directory already exists but lacks either required makefile, the script stops rather than overwriting it. With `POS16_CHECK_ONLY=1`, it reports the Vendor file count and exits **before** changing product files, cloning IMS, applying patches, or compiling. The check verifies the two required makefiles, not every referenced proprietary blob.
+## Source branches currently configured
 
-If that check passes, submit the actual build:
+- PixelOS manifest/base projects: `PixelOS-AOSP/android_manifest`, `sixteen-qpr2`
+- Device tree: `oplus-mt6895/android_device_oplus_zephyr`, `lineage-23.2`
+- Prebuilt kernel candidate: `V1NAY007/android_device_oplus_zephyr-kernel`, `upstream-test-5.10.260`
+- MediaTek hardware: `oplus-mt6895/android_hardware_mediatek`, `lineage-23.2`
+- OPlus hardware: `oplus-mt6895/android_hardware_oplus`, `lineage-23.2`
+- MediaTek vendor sepolicy: `oplus-mt6895/android_device_mediatek_sepolicy_vndr`, `lineage-23.2`
+- Vendor tree: [NINJAHUNTER1357/proprietary_vendor_oplus_zephyr](https://gitlab.com/NINJAHUNTER1357/proprietary_vendor_oplus_zephyr), `lineage-23.2`
+- MediaTek IMS: [Adarsh0127-Elite/android_vendor_mediatek_ims](https://github.com/Adarsh0127-Elite/android_vendor_mediatek_ims), `android-16-qpr2`
 
-~~~bash
-crave run --projectID 82 --no-patch --detached -- "curl -fLSs --retry 3 https://raw.githubusercontent.com/asxcaz/pos16-zephyr/acd28a99ec6c298cbdf93f3d9aad9be9c51efe98/build.sh -o /tmp/pos16-zephyr-build.sh && bash /tmp/pos16-zephyr-build.sh"
-~~~
+The device tree configures a prebuilt kernel (`TARGET_FORCE_PREBUILT_KERNEL := true`); this script does not build the Linux kernel source. Before entering Android build setup it verifies the kernel image, MT6895 DTB, all three module load lists, every listed module, and the extra modules explicitly named by `BoardConfig.mk`.
 
-Both commands deliberately avoid `--clean`, `repo init`, and full PixelOS source initialization.
+## Vendor and IMS handling
 
-## Source branches used
-
-- PixelOS base: sixteen-qpr2 (already provisioned by the Crave PixelOS project)
-- Device tree: oplus-mt6895/android_device_oplus_zephyr, lineage-23.2
-- Prebuilt kernel: V1NAY007/android_device_oplus_zephyr-kernel, upstream-test-5.10.260
-- MediaTek hardware: oplus-mt6895/android_hardware_mediatek, lineage-23.2
-- OPlus hardware: oplus-mt6895/android_hardware_oplus, lineage-23.2
-- MediaTek vendor sepolicy: oplus-mt6895/android_device_mediatek_sepolicy_vndr, lineage-23.2
-- Vendor tree: [NINJAHUNTER1357/proprietary_vendor_oplus_zephyr](https://gitlab.com/NINJAHUNTER1357/proprietary_vendor_oplus_zephyr), `lineage-23.2` by default; override with `POS16_VENDOR_BRANCH`
-
-The device tree BoardConfig uses device/oplus/zephyr-kernel as a prebuilt kernel and sets TARGET_FORCE_PREBUILT_KERNEL. Therefore this script uses the supplied 5.10.260 Image.gz and MT6895 DTB; it does not build android_kernel_oplus_mt6895 from source. If changing to a source-built kernel later, use that kernel repository's lineage-24.0 branch, not the deprecated 23.2 branch.
-
-## Proprietary vendor tree
-
-The device tree requires these files:
+The required vendor makefiles are:
 
 - `vendor/oplus/zephyr/zephyr-vendor.mk`
 - `vendor/oplus/zephyr/BoardConfigVendor.mk`
 
-The organization README lists the Vendor tree at [NINJAHUNTER1357/proprietary_vendor_oplus_zephyr](https://gitlab.com/NINJAHUNTER1357/proprietary_vendor_oplus_zephyr). The build script now clones that repository into `vendor/oplus/zephyr` automatically when the directory is absent. It uses the verified `lineage-23.2` branch unless `POS16_VENDOR_BRANCH` is set explicitly.
+When `vendor/oplus/zephyr` is absent, the script shallow-clones the documented GitLab Vendor tree at `lineage-23.2`. It refuses to overwrite an existing partial vendor directory. It also pins IMS to `android-16-qpr2` and checks that `vendor/mediatek/ims/ims.mk` exists.
 
-If `vendor/oplus/zephyr` already exists and contains both required makefiles, the script reuses it. If the directory exists but either file is missing, the script stops and refuses to overwrite it; repair or move that directory before retrying.
+Do not commit proprietary blobs, firmware images, signing keys, or credentials to this public build-helper repository.
 
-Do not commit proprietary blobs, firmware images, signing keys, or credentials to this public build-helper repository. The Vendor tree is fetched into the build workspace, not copied into this repository.
+## Patch behavior
 
-## What build.sh does
+- The Aperture MediaTek 60 FPS patch is checked for already-applied/applicable state.
+- The GED-KPI Surface patch is deliberately skipped because it conflicts with PixelOS `sixteen-qpr2`'s Surface API and needs a real port.
+- The MediaTek UDFPS dither patch is a child of the GED-KPI patch, so it is skipped with the parent instead of being attempted in isolation.
+- The MediaTek UDFPS GHBM patch is checked against the actual base source at build time. If it does not apply, the script logs a warning and continues. That does not by itself block compilation, but fingerprint high-brightness/dimming behavior should be validated on a built ROM; a successful compile would not prove the feature works correctly.
 
-1. Locates the existing PixelOS source root and fails if no initialized .repo tree exists.
-2. Writes a local manifest for the zephyr device tree, 5.10.260 prebuilt kernel, and required open-source dependencies.
-3. Runs targeted incremental repo sync only for the five device/dependency paths, without --force-sync or --clean.
-4. Fetches the documented Vendor tree from GitLab when needed and checks the two required makefiles before doing any expensive work.
-5. Creates a PixelOS custom_zephyr product definition from the existing device configuration.
-6. Uses small GitHub .patch downloads for optional compatibility changes instead of fetching entire framework commit history. The GED-KPI Surface patch is intentionally skipped because it conflicts with the Android 16 QPR2 Surface API and needs a proper port.
-7. Clones the Android 16 QPR2 MediaTek IMS project, then runs lunch custom_zephyr-bp4a-userdebug and m pixelos.
-8. Lists zip/image artifacts in out/target/product/zephyr when the build completes.
+## What the build does
 
-## Verification status
+1. Reuses the existing Crave PixelOS source root and updates the manifest selection to `sixteen-qpr2`.
+2. Runs an incremental, non-destructive sync over the existing PixelOS source and zephyr-specific repositories.
+3. Retrieves Vendor and verifies required makefiles.
+4. Verifies the prebuilt kernel and its referenced module files, then creates the PixelOS `custom_zephyr` product config.
+5. Retrieves the MediaTek IMS dependency and runs compatible optional patches.
+6. Executes `lunch custom_zephyr-bp4a-userdebug` and the real ROM build command `m -j"$JOBS" pixelos`.
+7. Lists any zip/image artifacts under `out/target/product/zephyr` when the build completes.
 
-GitHub Actions (`.github/workflows/validate.yml`) checks Bash syntax, ShellCheck, the embedded manifest branches/paths, and safe refusal when no Crave source checkout exists. These are shallow checks only: the workflow does not sync Android sources or build a ROM. An actual ROM build has not been run from this repository: that requires a live Crave build job and the compatible proprietary vendor files.
+## Automated checks
+
+GitHub Actions validates shell syntax, ShellCheck, the local manifest, target/build commands, and safe refusal without a Crave checkout. A second job shallow-clones relevant upstream repos (including LFS-backed Vendor and kernel artifacts) to verify branches/files and report whether framework patches apply to the current PixelOS branch. **This is a deep source/patch preflight, not a ROM compile.** A real ROM build still requires a Crave build job.

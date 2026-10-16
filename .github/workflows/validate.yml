@@ -89,6 +89,10 @@ jobs:
           remotes = {r.attrib["name"]: r.attrib["fetch"] for r in root.findall("remote")}
           assert remotes["zephyr"] == "https://github.com/oplus-mt6895"
           assert remotes["zephyr-kernel"] == "https://github.com/V1NAY007"
+          assert 'MANIFEST_URL="https://github.com/PixelOS-AOSP/android_manifest.git"' in script
+          assert 'MANIFEST_BRANCH="sixteen-qpr2"' in script
+          assert 'repo init -u "$MANIFEST_URL" -b "$MANIFEST_BRANCH"' in script, "Must pin the existing repo client to the PixelOS QPR2 manifest"
+          assert 'repo sync -c --no-tags --optimized-fetch --prune -j4' in script, "Must update the existing PixelOS manifest projects incrementally"
 
           vendor_url = "https://gitlab.com/NINJAHUNTER1357/proprietary_vendor_oplus_zephyr.git"
           assert f'VENDOR_REPO_URL="{vendor_url}"' in script, "Missing official GitLab Vendor repository URL"
@@ -116,24 +120,20 @@ jobs:
               assert project["revision"] == revision, f"Wrong branch/revision for {path}"
 
           lines = script.splitlines()
-          start = next((i for i, line in enumerate(lines) if re.match(r"^repo sync\b", line)), None)
-          if start is None:
-              raise SystemExit("ERROR: repo sync command not found")
-          sync_lines = [lines[start]]
-          i = start
-          while sync_lines[-1].rstrip().endswith("\\") and i + 1 < len(lines):
-              i += 1
-              sync_lines.append(lines[i])
-          sync = "\n".join(sync_lines)
-
-          for path in expected:
-              assert path in sync, f"repo sync is not targeted to {path}"
+          sync_lines = [line.strip() for line in lines if re.match(r"^repo sync\b", line.strip())]
+          assert len(sync_lines) == 1, f"Expected one repo sync command, found {len(sync_lines)}"
+          sync = sync_lines[0]
+          assert sync == "repo sync -c --no-tags --optimized-fetch --prune -j4", f"Unexpected sync flags: {sync}"
           assert "--force-sync" not in sync and "--clean" not in sync, "Destructive sync flags must not be used"
-          assert not re.search(r"(?m)^\s*repo init\b", script), "Script must not initialize a fresh source checkout"
-          assert "repo sync -c --no-tags --optimized-fetch --prune -j4" in sync
-          print("Embedded manifest XML: valid")
+          assert "vendor_dlkm.modules.load" in script
+          assert "vendor_ramdisk.modules.load.recovery" in script
+          assert 'lunch custom_zephyr-bp4a-userdebug' in script
+          assert 'm -j"$JOBS" pixelos' in script
+          assert "Skipping dependent UDFPS dither patch" in script
+          print("Embedded local manifest XML: valid")
           print(f"Validated {len(expected)} pinned device projects")
-          print("repo sync is targeted; no repo init or destructive sync flags")
+          print("PixelOS sixteen-qpr2 manifest is pinned and synced in place without clean/force-sync")
+          print("Kernel module lists, IMS makefile, lunch target, real PixelOS build target, and known patch skip are guarded")
           PY
 
       - name: Smoke-test safe refusal without a Crave source checkout
@@ -162,3 +162,191 @@ jobs:
             exit 1
           fi
           echo "Safe refusal behavior: passed"
+
+  
+  shallow-source-integration:
+    name: Shallow source and patch preflight
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      GIT_LFS_SKIP_SMUDGE: "1"
+    steps:
+      - name: Check out build helper
+        uses: actions/checkout@v4
+
+      - name: Check disk space
+        shell: bash
+        run: |
+          set -euo pipefail
+          df -h /
+          available_kb="$(df --output=avail -k / | tail -n 1 | tr -d ' ')"
+          echo "Available disk: $((available_kb / 1024 / 1024)) GiB"
+          if [[ "$available_kb" -lt 20000000 ]]; then
+            echo "::error::Need at least 20 GiB free for shallow source integration tests."
+            exit 1
+          fi
+
+      - name: Install Git LFS
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y git-lfs
+          git lfs version
+          git lfs install --skip-smudge
+
+      - name: Shallow-clone PixelOS and zephyr source dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          WORK="$RUNNER_TEMP/pos16-source-smoke"
+          mkdir -p "$WORK"
+
+          clone_branch() {
+            local url="$1" branch="$2" dest="$3"
+            echo "::group::shallow clone $url @ $branch"
+            git clone --depth=1 --single-branch --no-tags --branch "$branch" "$url" "$dest"
+            echo "::endgroup::"
+          }
+
+          clone_branch https://github.com/PixelOS-AOSP/android_manifest.git sixteen-qpr2 "$WORK/manifest"
+          clone_branch https://github.com/PixelOS-AOSP/android_vendor_custom.git sixteen-qpr2 "$WORK/vendor-custom"
+          clone_branch https://github.com/PixelOS-AOSP/android_vendor_lineage.git sixteen-qpr2 "$WORK/vendor-lineage"
+          clone_branch https://github.com/oplus-mt6895/android_device_oplus_zephyr.git lineage-23.2 "$WORK/device"
+          clone_branch https://github.com/oplus-mt6895/android_hardware_mediatek.git lineage-23.2 "$WORK/hardware-mediatek"
+          clone_branch https://github.com/oplus-mt6895/android_hardware_oplus.git lineage-23.2 "$WORK/hardware-oplus"
+          clone_branch https://github.com/oplus-mt6895/android_device_mediatek_sepolicy_vndr.git lineage-23.2 "$WORK/sepolicy"
+          clone_branch https://github.com/V1NAY007/android_device_oplus_zephyr-kernel.git upstream-test-5.10.260 "$WORK/kernel-github"
+          clone_branch https://gitlab.com/NINJAHUNTER1357/android_device_oplus_zephyr-kernel.git los-23.2 "$WORK/kernel-gitlab"
+          clone_branch https://gitlab.com/NINJAHUNTER1357/proprietary_vendor_oplus_zephyr.git lineage-23.2 "$WORK/vendor-zephyr"
+          clone_branch https://github.com/Adarsh0127-Elite/android_vendor_mediatek_ims.git android-16-qpr2 "$WORK/ims"
+          clone_branch https://github.com/PixelOS-AOSP/android_frameworks_native.git sixteen-qpr2 "$WORK/frameworks-native"
+          clone_branch https://github.com/PixelOS-AOSP/android_frameworks_base.git sixteen-qpr2 "$WORK/frameworks-base"
+
+          echo "::group::download LFS content for build-critical vendor/kernel trees"
+          git -C "$WORK/kernel-github" lfs pull
+          git -C "$WORK/kernel-gitlab" lfs pull
+          git -C "$WORK/vendor-zephyr" lfs pull
+          echo "::endgroup::"
+
+          python3 - "$WORK" <<'PY'
+          from pathlib import Path
+          import sys
+          import xml.etree.ElementTree as ET
+
+          root = Path(sys.argv[1])
+          default = ET.parse(root / "manifest" / "default.xml").getroot()
+          includes = {x.attrib.get("name") for x in default.findall("include")}
+          assert "snippets/pixelos.xml" in includes, "PixelOS manifest no longer includes snippets/pixelos.xml"
+          pixelos = ET.parse(root / "manifest" / "snippets" / "pixelos.xml").getroot()
+          project = next((p for p in pixelos.findall("project") if p.attrib.get("path") == "vendor/custom"), None)
+          assert project is not None and project.attrib.get("name") == "PixelOS-AOSP/android_vendor_custom"
+          assert (root / "vendor-custom" / "config" / "common_full_phone.mk").is_file()
+          assert (root / "vendor-custom" / "build" / "envsetup.sh").is_file()
+          release = (root / "vendor-lineage" / "vars" / "aosp_target_release").read_text()
+          assert "aosp_target_release=bp4a" in release, "PixelOS target release no longer matches the scripted lunch target"
+
+          device = root / "device"
+          assert (device / "lineage_zephyr.mk").is_file()
+          assert (device / "proprietary-files.txt").is_file()
+          assert (device / "extract-files.py").is_file()
+          assert "hardware/mediatek" in (device / "lineage.dependencies").read_text()
+
+          product = (device / "lineage_zephyr.mk").read_text()
+          product = product.replace("vendor/lineage/config/common_full_phone.mk",
+                                    "vendor/custom/config/common_full_phone.mk")
+          product = product.replace("PRODUCT_NAME := lineage_zephyr", "PRODUCT_NAME := custom_zephyr")
+          assert "vendor/custom/config/common_full_phone.mk" in product
+          assert "PRODUCT_NAME := custom_zephyr" in product
+          assert "PRODUCT_DEVICE := zephyr" in product
+
+          required = [
+              "Image.gz", "dtb/mt6895.dtb",
+              "modules/vendor_dlkm.modules.load",
+              "modules/vendor_ramdisk.modules.load",
+              "modules/vendor_ramdisk.modules.load.recovery",
+              "modules/bt_drv_6895.ko", "modules/connfem.ko",
+              "modules/conninfra.ko", "modules/fmradio_drv_connac2x.ko",
+              "modules/gps_drv_dl_v050.ko", "modules/gps_pwr.ko",
+              "modules/gps_scp.ko", "modules/wlan_drv_gen4m_6895.ko",
+              "modules/wmt_chrdev_wifi_connac2.ko",
+          ]
+          for name in required:
+              for variant in ("kernel-github", "kernel-gitlab"):
+                  p = root / variant / name
+                  assert p.is_file() and p.stat().st_size > 0, f"{variant} missing required artifact: {name}"
+
+          for variant in ("kernel-github", "kernel-gitlab"):
+              kdir = root / variant
+              for list_name in (
+                  "modules/vendor_dlkm.modules.load",
+                  "modules/vendor_ramdisk.modules.load",
+                  "modules/vendor_ramdisk.modules.load.recovery",
+              ):
+                  for raw in (kdir / list_name).read_text().splitlines():
+                      module = raw.split("#", 1)[0].strip()
+                      if module:
+                          path = kdir / "modules" / module
+                          assert path.is_file() and path.stat().st_size > 0, f"{variant}: {list_name} lists missing module {module}"
+
+          ims = root / "ims"
+          assert (ims / "ims.mk").is_file()
+          vendor = root / "vendor-zephyr"
+          assert (vendor / "zephyr-vendor.mk").is_file()
+          assert (vendor / "BoardConfigVendor.mk").is_file()
+
+          print("PixelOS manifest/include, vendor/custom config, bp4a release, device product transform: PASS")
+          print("Both candidate kernel repos contain Image.gz, MT6895 DTB, required modules and every listed load module: PASS")
+          print("Vendor .mk files and IMS ims.mk: PASS")
+          PY
+
+          echo "::group::compare current GitHub kernel candidate with organization's GitLab kernel repo"
+          for artifact in Image.gz dtb/mt6895.dtb modules/vendor_dlkm.modules.load modules/vendor_ramdisk.modules.load modules/vendor_ramdisk.modules.load.recovery; do
+            if cmp -s "$WORK/kernel-github/$artifact" "$WORK/kernel-gitlab/$artifact"; then
+              echo "IDENTICAL: $artifact"
+            else
+              echo "DIFFERENT: $artifact"
+            fi
+          done
+          echo "GitHub kernel commit: $(git -C "$WORK/kernel-github" rev-parse --short HEAD)"
+          echo "GitLab official kernel commit: $(git -C "$WORK/kernel-gitlab" rev-parse --short HEAD)"
+          echo "::endgroup::"
+
+          df -h /
+
+      - name: Check framework patch applicability against current PixelOS branches
+        shell: bash
+        run: |
+          set -euo pipefail
+          WORK="$RUNNER_TEMP/pos16-source-smoke"
+          tmp="$RUNNER_TEMP/pos16-patches"
+          mkdir -p "$tmp"
+
+          classify_patch() {
+            local label="$1" repo="$2" url="$3" patch="$tmp/$label.patch"
+            curl -fLsS --retry 3 "$url" -o "$patch"
+            if git -C "$repo" apply --reverse --check "$patch" >/dev/null 2>&1; then
+              echo "PATCH STATUS: $label = already-present"
+            elif git -C "$repo" apply --check "$patch" >/dev/null 2>&1; then
+              echo "PATCH STATUS: $label = cleanly-applicable"
+            else
+              echo "PATCH STATUS: $label = conflict-or-needs-port"
+            fi
+          }
+
+          classify_patch ged-kpi "$WORK/frameworks-native" https://github.com/oplus-mt6895/android_frameworks_native/commit/5ae7b13cc9e7359261d15ab185ee4aaeb512f754.patch
+          classify_patch udfps-dither "$WORK/frameworks-native" https://github.com/oplus-mt6895/android_frameworks_native/commit/31f62caf1160bb8460eb7f7c66e279fdb51867d6.patch
+          classify_patch udfps-ghbm "$WORK/frameworks-base" https://github.com/oplus-mt6895/android_frameworks_base/commit/8fdf7742a1adabcb5c79fd23dcf2039fcda6ce3b.patch
+
+          if [[ -f "$WORK/frameworks-native/libs/renderengine/mediatek/SkiaDitherEffect.cpp" ]]; then
+            echo "UDFPS dither implementation file exists in PixelOS base."
+          else
+            echo "UDFPS dither implementation file is not present in PixelOS base."
+          fi
+          if [[ -f "$WORK/frameworks-base/packages/SystemUI/src/com/android/systemui/biometrics/MtkUdfpsScrimController.java" ]]; then
+            echo "MediaTek UDFPS GHBM controller source exists in PixelOS base."
+          else
+            echo "MediaTek UDFPS GHBM controller source is not present in PixelOS base."
+          fi
+
+          df -h /
