@@ -15,13 +15,21 @@ cd /crave-devspaces/PixelOS
 
 The `clone create` operation creates a workspace snapshot of Crave's configured PixelOS project; it is not a manual `repo init`/full source download. Do not run `repo sync` or build commands directly in the Devspace shell. The build must be submitted with `crave run` from inside this project directory. Running `crave run` from `/crave-devspaces` itself causes `Could not get project root/url` because that parent directory is not a project clone.
 
-Submit the build from `/crave-devspaces/PixelOS`:
+From `/crave-devspaces/PixelOS`, first run a **vendor preflight** that does not start compiling:
 
 ~~~bash
-crave run --projectID 82 --no-patch --detached -- "curl -fLSs --retry 3 https://raw.githubusercontent.com/asxcaz/pos16-zephyr/36f130dc3685b28f92c45833fd1eb680de3bec4d/build.sh -o /tmp/pos16-zephyr-build.sh && bash /tmp/pos16-zephyr-build.sh"
+crave run --projectID 82 --no-patch --detached -- "curl -fLSs --retry 3 https://raw.githubusercontent.com/asxcaz/pos16-zephyr/247b8eb9576735e51766c55a15e8029215664b1c/build.sh -o /tmp/pos16-zephyr-build.sh && POS16_CHECK_ONLY=1 bash /tmp/pos16-zephyr-build.sh"
 ~~~
 
-The command deliberately does not use `--clean`. The script refuses to run `repo init` or create a fresh PixelOS checkout. Inside the queued build job, it runs a targeted incremental `repo sync` for the five zephyr/device dependency paths only—not all PixelOS manifest projects—so it reuses Crave's pre-synced source tree.
+This syncs only the five device/dependency paths, verifies that the device tree and prebuilt kernel files exist, and checks for both required vendor makefiles. If either makefile is absent, it exits with a specific error; if both exist, it reports the number of files in `vendor/oplus/zephyr` and exits **before** changing product files, cloning IMS, applying patches, or compiling. This checks the presence of the makefiles and tree, not every referenced proprietary blob.
+
+If that check passes, submit the actual build:
+
+~~~bash
+crave run --projectID 82 --no-patch --detached -- "curl -fLSs --retry 3 https://raw.githubusercontent.com/asxcaz/pos16-zephyr/247b8eb9576735e51766c55a15e8029215664b1c/build.sh -o /tmp/pos16-zephyr-build.sh && bash /tmp/pos16-zephyr-build.sh"
+~~~
+
+Both commands deliberately avoid `--clean`, `repo init`, and full PixelOS source initialization.
 
 ## Source branches used
 
