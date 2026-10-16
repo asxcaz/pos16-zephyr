@@ -18,7 +18,7 @@ The `clone create` operation creates a workspace snapshot of Crave's configured 
 Submit the build from `/crave-devspaces/PixelOS`:
 
 ~~~bash
-crave run --projectID 82 --no-patch --detached -- "curl -fLSs --retry 3 https://raw.githubusercontent.com/asxcaz/pos16-zephyr/ded24d69cd5dceb42c0f21a8542c5f51e0a3d462/build.sh -o /tmp/pos16-zephyr-build.sh && bash /tmp/pos16-zephyr-build.sh"
+crave run --projectID 82 --no-patch --detached -- "curl -fLSs --retry 3 https://raw.githubusercontent.com/asxcaz/pos16-zephyr/36f130dc3685b28f92c45833fd1eb680de3bec4d/build.sh -o /tmp/pos16-zephyr-build.sh && bash /tmp/pos16-zephyr-build.sh"
 ~~~
 
 The command deliberately does not use `--clean`. The script refuses to run `repo init` or create a fresh PixelOS checkout. Inside the queued build job, it runs a targeted incremental `repo sync` for the five zephyr/device dependency paths only—not all PixelOS manifest projects—so it reuses Crave's pre-synced source tree.
@@ -41,7 +41,7 @@ The public device tree references both of these files:
 - vendor/oplus/zephyr/zephyr-vendor.mk
 - vendor/oplus/zephyr/BoardConfigVendor.mk
 
-They are not in the public device-tree repository. The build script checks for them and stops with an explicit error if they are absent. Extract the proprietary blobs from the compatible OnePlus 10R (pickle) stock firmware/device or stage a trusted vendor backup into the Crave build workspace before retrying.
+They are not in the public device-tree repository. The build script checks for them immediately after the device dependencies sync and stops with an explicit error before downloading IMS or applying patches if they are absent. Extract the proprietary blobs from the compatible OnePlus 10R (pickle) stock firmware/device or stage a trusted vendor backup into the Crave build workspace before retrying.
 
 Do not commit proprietary blobs, firmware images, signing keys, or credentials to this public repository. The script does not try to fabricate missing vendor files.
 
@@ -50,10 +50,11 @@ Do not commit proprietary blobs, firmware images, signing keys, or credentials t
 1. Locates the existing PixelOS source root and fails if no initialized .repo tree exists.
 2. Writes a local manifest for the zephyr device tree, 5.10.260 prebuilt kernel, and required open-source dependencies.
 3. Runs targeted incremental repo sync only for the five device/dependency paths, without --force-sync or --clean.
-4. Creates a PixelOS custom_zephyr product definition from the existing device configuration.
-5. Clones the Android 16 QPR2 MediaTek IMS project and applies the specific compatibility commits referenced by the device tree, skipping commits already present.
-6. Checks for proprietary vendor files, then runs lunch custom_zephyr-bp4a-userdebug and m pixelos.
-7. Lists zip/image artifacts in out/target/product/zephyr when the build completes.
+4. Checks for the proprietary vendor makefiles immediately after sync and exits before expensive work if they are missing.
+5. Creates a PixelOS custom_zephyr product definition from the existing device configuration.
+6. Uses small GitHub .patch downloads for optional compatibility changes instead of fetching entire framework commit history. The GED-KPI Surface patch is intentionally skipped because it conflicts with the Android 16 QPR2 Surface API and needs a proper port.
+7. Clones the Android 16 QPR2 MediaTek IMS project, then runs lunch custom_zephyr-bp4a-userdebug and m pixelos.
+8. Lists zip/image artifacts in out/target/product/zephyr when the build completes.
 
 ## Verification status
 
