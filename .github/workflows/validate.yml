@@ -92,7 +92,7 @@ jobs:
           assert 'MANIFEST_URL="https://github.com/PixelOS-AOSP/android_manifest.git"' in script
           assert 'MANIFEST_BRANCH="sixteen-qpr2"' in script
           assert 'repo init -u "$MANIFEST_URL" -b "$MANIFEST_BRANCH"' in script, "Must pin the existing repo client to the PixelOS QPR2 manifest"
-          assert 'repo sync -c --no-tags --optimized-fetch --prune -j4' in script, "Must update the existing PixelOS manifest projects incrementally"
+          assert 'repo sync -c --no-tags --optimized-fetch --prune --force-sync -j4' in script, "Must update the existing PixelOS manifest projects incrementally and reconcile Repo metadata"
 
           vendor_url = "https://gitlab.com/NINJAHUNTER1357/proprietary_vendor_oplus_zephyr.git"
           assert f'VENDOR_REPO_URL="{vendor_url}"' in script, "Missing official GitLab Vendor repository URL"
@@ -123,8 +123,10 @@ jobs:
           sync_lines = [line.strip() for line in lines if re.match(r"^repo sync\b", line.strip())]
           assert len(sync_lines) == 1, f"Expected one repo sync command, found {len(sync_lines)}"
           sync = sync_lines[0]
-          assert sync == "repo sync -c --no-tags --optimized-fetch --prune -j4", f"Unexpected sync flags: {sync}"
-          assert "--force-sync" not in sync and "--clean" not in sync, "Destructive sync flags must not be used"
+          assert sync == "repo sync -c --no-tags --optimized-fetch --prune --force-sync -j4", f"Unexpected sync flags: {sync}"
+          assert "--clean" not in sync and "--force-checkout" not in sync, "Do not wipe the source tree or force-discard working-tree changes"
+          assert 'git stash push -m "pos16-zephyr saved Clang changes before PixelOS manifest sync"' in script, "Tracked Clang changes must be preserved before syncing"
+          assert "git -C \"$NATIVE_DIR\" rebase --abort" in script, "Recover an interrupted frameworks/native rebase before retrying sync"
           assert "vendor_dlkm.modules.load" in script
           assert "vendor_ramdisk.modules.load.recovery" in script
           assert 'lunch custom_zephyr-bp4a-userdebug' in script
@@ -136,7 +138,7 @@ jobs:
           assert ged_pos < dither_pos < ghbm_pos, "Apply GED-KPI first, then dependent dither, then GHBM"
           print("Embedded local manifest XML: valid")
           print(f"Validated {len(expected)} pinned device projects")
-          print("PixelOS sixteen-qpr2 manifest is pinned and synced in place without clean/force-sync")
+          print("PixelOS sixteen-qpr2 manifest is pinned and synced in place; force-sync reconciles project metadata without a clean checkout")
           print("Kernel module lists, IMS makefile, lunch target, real PixelOS build target, and known patch skip are guarded")
           PY
 
