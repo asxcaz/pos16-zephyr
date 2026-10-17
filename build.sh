@@ -17,7 +17,7 @@ if [ "$#" -gt 0 ] && [ "$1" = "--help" ]; then
   cat <<'HELP'
 Build PixelOS Android 16 QPR2 for realme GT Neo 3 (zephyr) in a pre-synced Crave PixelOS workspace.
 This script requires an existing .repo checkout. It re-pins that checkout to the official PixelOS sixteen-qpr2 manifest branch, then incrementally syncs existing projects in place.
-It does not create a fresh source checkout and never uses --clean or --force-sync.
+It does not create a fresh source checkout or use --clean. Before syncing, it aborts an interrupted frameworks/native rebase when present, saves tracked local Clang changes in a Git stash, and uses --force-sync to reconcile existing Repo metadata when projects change upstream remotes.
 The script fetches the public device-specific vendor tree from the project's documented GitLab repository when it is not already present.
 The vendor branch defaults to lineage-23.2; set POS16_VENDOR_BRANCH to override it.
 Set POS16_CHECK_ONLY=1 to sync device dependencies, prepare Vendor, and check prerequisites without starting a ROM build.
@@ -86,10 +86,34 @@ log "Pinning the existing checkout to PixelOS manifest branch $MANIFEST_BRANCH; 
 # Re-point the existing repo client at the intended manifest branch. Existing project
 # checkouts and Git objects are reused; repo init here does not re-clone the source tree.
 repo init -u "$MANIFEST_URL" -b "$MANIFEST_BRANCH"
-log "Incrementally syncing the existing PixelOS projects plus the zephyr local-manifest projects."
-# No project paths means all projects in the manifest are brought up to their pinned revisions.
-# -c/--no-tags/--optimized-fetch limit unnecessary history; no clean/force-sync is used.
-repo sync -c --no-tags --optimized-fetch --prune -j4
+
+# A prior interrupted repo sync can leave frameworks/native halfway through a rebase.
+# Abort only that incomplete rebase; this does not reset the project to an unrelated revision.
+NATIVE_DIR="$ROOT/frameworks/native"
+if git -C "$NATIVE_DIR" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  if git -C "$NATIVE_DIR" status 2>&1 | grep -Eqi 'rebase in progress|currently rebasing'; then
+    log "Found an incomplete frameworks/native rebase from a prior sync; aborting that interrupted rebase."
+    git -C "$NATIVE_DIR" rebase --abort || die "Could not abort the interrupted frameworks/native rebase."
+  fi
+fi
+
+# Crave's existing source can contain tracked changes to prebuilt Clang symlinks/tools.
+# Preserve those changes in the project's stash before the manifest switches toolchain revisions.
+CLANG_DIR="$ROOT/prebuilts/clang/host/linux-x86"
+if git -C "$CLANG_DIR" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  if ! git -C "$CLANG_DIR" diff --quiet HEAD --; then
+    log "Saving tracked local changes in prebuilts/clang/host/linux-x86 to a Git stash before sync."
+    git -C "$CLANG_DIR" stash push -m "pos16-zephyr saved Clang changes before PixelOS manifest sync"
+    git -C "$CLANG_DIR" diff --quiet HEAD -- || die "Clang files are still modified after attempting to stash them."
+    log "Clang working tree is clean; original changes remain in the project's Git stash for recovery."
+  fi
+fi
+
+log "Incrementally syncing existing PixelOS projects plus zephyr local-manifest projects."
+# No project paths means all projects in the manifest are brought up to pinned revisions.
+# --force-sync is needed when Crave's pre-synced tree maps an existing project to different
+# upstream Git metadata in PixelOS's manifest. It does not delete the source checkout.
+repo sync -c --no-tags --optimized-fetch --prune --force-sync -j4
 
 [ -f "$DEVICE_DIR/lineage_zephyr.mk" ] || die "The lineage-23.2 zephyr device tree did not sync correctly."
 KERNEL_DIR="$ROOT/device/oplus/zephyr-kernel"
