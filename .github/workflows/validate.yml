@@ -125,7 +125,7 @@ jobs:
           sync = sync_lines[0]
           assert sync == "repo sync -c --no-tags --optimized-fetch --prune --force-sync -j4", f"Unexpected sync flags: {sync}"
           assert "--clean" not in sync and "--force-checkout" not in sync, "Do not wipe the source tree or force-discard working-tree changes"
-          assert 'git stash push -m "pos16-zephyr saved Clang changes before PixelOS manifest sync"' in script, "Tracked Clang changes must be preserved before syncing"
+          assert 'stash push -m "pos16-zephyr saved Clang changes before PixelOS manifest sync"' in script, "Tracked Clang changes must be preserved before syncing"
           assert "git -C \"$NATIVE_DIR\" rebase --abort" in script, "Recover an interrupted frameworks/native rebase before retrying sync"
           assert "vendor_dlkm.modules.load" in script
           assert "vendor_ramdisk.modules.load.recovery" in script
