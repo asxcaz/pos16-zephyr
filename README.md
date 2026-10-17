@@ -11,9 +11,9 @@ cd /crave-devspaces/PixelOS
 crave run --projectID 82 --no-patch --detached -- "curl -fLSs --retry 3 https://raw.githubusercontent.com/asxcaz/pos16-zephyr/main/build.sh -o /tmp/pos16-zephyr-build.sh && bash /tmp/pos16-zephyr-build.sh"
 ~~~
 
-The script first verifies that the workspace already has an initialized `.repo` checkout. It then re-pins the **existing** repo client to the official PixelOS `sixteen-qpr2` manifest and performs an incremental sync of the projects described by that manifest plus the local zephyr manifest.
+The script first verifies that the workspace already has an initialized `.repo` checkout. It then re-pins the **existing** repo client to the official PixelOS `sixteen-qpr2` manifest and incrementally syncs the projects described by that manifest plus the local zephyr manifest.
 
-**This updates the existing checkout; it does not run `--clean`, `--force-sync`, or clone a new PixelOS source tree.** Existing Git objects and checkouts are reused, while projects that are behind their manifest revisions will be fetched/updated. Because the base source provided by Crave may be older, the full manifest sync is intentional; syncing only the device repos would leave the Android/PixelOS base stale.
+**This reuses the existing checkout and Git objects; it does not run `--clean` or clone a fresh PixelOS source tree.** It uses `repo sync --force-sync` because the Crave snapshot contains projects whose Git metadata points at different upstream remotes than the current PixelOS manifest. Before syncing, it aborts an interrupted `frameworks/native` rebase if one is present, and saves tracked changes in the Clang-prebuilt project to a Git stash so those changes are recoverable instead of blocking checkout. The full manifest sync is intentional; syncing only the device repos would leave the Android/PixelOS base stale.
 
 Do not run `repo sync` or Android build commands directly in the interactive Devspace shell. Submit the build with `crave run` from inside the project.
 
@@ -51,7 +51,7 @@ Do not commit proprietary blobs, firmware images, signing keys, or credentials t
 ## What the build does
 
 1. Reuses the existing Crave PixelOS source root and updates the manifest selection to `sixteen-qpr2`.
-2. Runs an incremental, non-destructive sync over the existing PixelOS source and zephyr-specific repositories.
+2. Runs an incremental sync over the existing PixelOS source and zephyr-specific repositories, using `--force-sync` to reconcile old Crave Git metadata; it does not use `--clean` or `--force-checkout`.
 3. Retrieves Vendor and verifies required makefiles.
 4. Verifies the prebuilt kernel and its referenced module files, then creates the PixelOS `custom_zephyr` product config.
 5. Retrieves the MediaTek IMS dependency and runs compatible optional patches.
