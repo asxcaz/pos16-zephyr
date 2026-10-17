@@ -44,9 +44,9 @@ Do not commit proprietary blobs, firmware images, signing keys, or credentials t
 ## Patch behavior
 
 - The Aperture MediaTek 60 FPS patch is checked for already-applied/applicable state.
-- The GED-KPI Surface patch is deliberately skipped because it conflicts with PixelOS `sixteen-qpr2`'s Surface API and needs a real port.
-- The MediaTek UDFPS dither patch is a child of the GED-KPI patch, so it is skipped with the parent instead of being attempted in isolation.
-- The MediaTek UDFPS GHBM patch is checked against the actual base source at build time. If it does not apply, the script logs a warning and continues. That does not by itself block compilation, but fingerprint high-brightness/dimming behavior should be validated on a built ROM; a successful compile would not prove the feature works correctly.
+- The GED-KPI MediaTek GPU scheduling patch is tested against the fully synced PixelOS `sixteen-qpr2` base and applied when cleanly applicable. The Actions shallow-source test confirmed clean application to the current branch.
+- The MediaTek UDFPS dither patch is applied after GED-KPI (its parent) when cleanly applicable. The Actions test verifies the pair in sequence against a temporary worktree, not just independently.
+- The MediaTek UDFPS GHBM patch currently conflicts with PixelOS `sixteen-qpr2` and is skipped with a warning. This is not a compile blocker by itself, but fingerprint high-brightness/dimming behavior remains an unresolved device-feature compatibility item and must be tested on a built ROM.
 
 ## What the build does
 

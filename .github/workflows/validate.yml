@@ -129,7 +129,11 @@ jobs:
           assert "vendor_ramdisk.modules.load.recovery" in script
           assert 'lunch custom_zephyr-bp4a-userdebug' in script
           assert 'm -j"$JOBS" pixelos' in script
-          assert "Skipping dependent UDFPS dither patch" in script
+          ged_pos = script.find("5ae7b13cc9e7359261d15ab185ee4aaeb512f754.patch")
+          dither_pos = script.find("31f62caf1160bb8460eb7f7c66e279fdb51867d6.patch")
+          ghbm_pos = script.find("8fdf7742a1adabcb5c79fd23dcf2039fcda6ce3b.patch")
+          assert -1 not in (ged_pos, dither_pos, ghbm_pos), "Missing MediaTek framework patch URL"
+          assert ged_pos < dither_pos < ghbm_pos, "Apply GED-KPI first, then dependent dither, then GHBM"
           print("Embedded local manifest XML: valid")
           print(f"Validated {len(expected)} pinned device projects")
           print("PixelOS sixteen-qpr2 manifest is pinned and synced in place without clean/force-sync")
@@ -348,9 +352,37 @@ jobs:
             fi
           }
 
+          GED_PATCH="$tmp/ged-kpi.patch"
+          DITHER_PATCH="$tmp/udfps-dither.patch"
+          GHBM_PATCH="$tmp/udfps-ghbm.patch"
+          curl -fLsS --retry 3 https://github.com/oplus-mt6895/android_frameworks_native/commit/5ae7b13cc9e7359261d15ab185ee4aaeb512f754.patch -o "$GED_PATCH"
+          curl -fLsS --retry 3 https://github.com/oplus-mt6895/android_frameworks_native/commit/31f62caf1160bb8460eb7f7c66e279fdb51867d6.patch -o "$DITHER_PATCH"
+          curl -fLsS --retry 3 https://github.com/oplus-mt6895/android_frameworks_base/commit/8fdf7742a1adabcb5c79fd23dcf2039fcda6ce3b.patch -o "$GHBM_PATCH"
+
+          # Classify the patches independently for clear diagnostics.
           classify_patch ged-kpi "$WORK/frameworks-native" https://github.com/oplus-mt6895/android_frameworks_native/commit/5ae7b13cc9e7359261d15ab185ee4aaeb512f754.patch
           classify_patch udfps-dither "$WORK/frameworks-native" https://github.com/oplus-mt6895/android_frameworks_native/commit/31f62caf1160bb8460eb7f7c66e279fdb51867d6.patch
           classify_patch udfps-ghbm "$WORK/frameworks-base" https://github.com/oplus-mt6895/android_frameworks_base/commit/8fdf7742a1adabcb5c79fd23dcf2039fcda6ce3b.patch
+
+          # Prove GED-KPI then its UDFPS dither child apply to the same clean base.
+          PATCH_TEST="$WORK/frameworks-native-patch-test"
+          git -C "$WORK/frameworks-native" worktree add --detach "$PATCH_TEST" HEAD
+          apply_in_order() {
+            local label="$1"
+            local patch="$2"
+            if git -C "$PATCH_TEST" apply --reverse --check "$patch" >/dev/null 2>&1; then
+              echo "SEQUENTIAL PATCH: $label = already-present"
+            elif git -C "$PATCH_TEST" apply --check "$patch" >/dev/null 2>&1; then
+              git -C "$PATCH_TEST" apply "$patch"
+              echo "SEQUENTIAL PATCH: $label = applied"
+            else
+              echo "::error::Sequential patch cannot apply cleanly: $label"
+              return 1
+            fi
+          }
+          apply_in_order ged-kpi "$GED_PATCH"
+          apply_in_order udfps-dither "$DITHER_PATCH"
+          git -C "$WORK/frameworks-native" worktree remove --force "$PATCH_TEST"
 
           if [[ -f "$WORK/frameworks-native/libs/renderengine/mediatek/SkiaDitherEffect.cpp" ]]; then
             echo "UDFPS dither implementation file exists in PixelOS base."

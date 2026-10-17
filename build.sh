@@ -235,13 +235,16 @@ apply_patch_if_applicable "$ROOT/packages/apps/Aperture" \
   https://github.com/Adarsh0127-Elite/android_packages_apps_Aperture/commit/9509277efc852ad8bdcce204e0d9cfe104b6d190.patch \
   "Aperture MediaTek 60 FPS support"
 
-# PixelOS sixteen-qpr2 has refactored Surface dequeue/queue handling. The
-# upstream GED-KPI patch conflicts in Surface.cpp and Surface.h and must be
-# ported to the new API before it can be enabled safely. Skip it for this build.
-log "Skipping optional GED-KPI Surface patch 5ae7b13cc9e7359261d15ab185ee4aaeb512f754: known API conflict with PixelOS sixteen-qpr2."
-# The MediaTek UDFPS dither commit is stacked directly on top of that GED-KPI
-# commit. Do not try to apply the child patch by itself; the pair needs a joint port.
-log "Skipping dependent UDFPS dither patch 31f62caf1160bb8460eb7f7c66e279fdb51867d6: its parent GED-KPI patch is incompatible with this PixelOS revision."
+# Full repo sync above updates the Crave-provided older base to the pinned
+# PixelOS sixteen-qpr2 manifest before these patches are tested. A shallow clone
+# of that branch confirmed both patches apply cleanly; always apply the parent first.
+apply_patch_if_applicable "$ROOT/frameworks/native" \
+  https://github.com/oplus-mt6895/android_frameworks_native/commit/5ae7b13cc9e7359261d15ab185ee4aaeb512f754.patch \
+  "MediaTek GED-KPI support (gpufreq)"
+
+apply_patch_if_applicable "$ROOT/frameworks/native" \
+  https://github.com/oplus-mt6895/android_frameworks_native/commit/31f62caf1160bb8460eb7f7c66e279fdb51867d6.patch \
+  "MediaTek UDFPS dither support"
 
 apply_patch_if_applicable "$ROOT/frameworks/base" \
   https://github.com/oplus-mt6895/android_frameworks_base/commit/8fdf7742a1adabcb5c79fd23dcf2039fcda6ce3b.patch \
